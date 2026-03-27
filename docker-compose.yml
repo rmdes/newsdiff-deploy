@@ -1,0 +1,103 @@
+services:
+  # Database migrations (runs once on startup, then exits)
+  migrate:
+    image: ghcr.io/rmdes/newsdiff:latest
+    command: ["node", "--import", "tsx/esm", "src/lib/server/db/migrate.ts"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-newsdiff}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-newsdiff}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # SvelteKit web app + feed poller + syndicator workers
+  app:
+    image: ghcr.io/rmdes/newsdiff:latest
+    command: ["node", "build/index.js"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-newsdiff}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-newsdiff}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ORIGIN: ${ORIGIN:?Set ORIGIN to your public URL}
+      PORT: "3000"
+      NODE_ENV: production
+      BOT_ORIGIN: ${ORIGIN}
+      BOT_USERNAME: ${BOT_USERNAME:-bot}
+      BOT_NAME: ${BOT_NAME:-NewsDiff Bot}
+      BLUESKY_HANDLE: ${BLUESKY_HANDLE:-}
+      BLUESKY_PASSWORD: ${BLUESKY_PASSWORD:-}
+      BLUESKY_EMBED_TYPE: ${BLUESKY_EMBED_TYPE:-image}
+      SYNDICATE_RATE_MS: ${SYNDICATE_RATE_MS:-300000}
+      IMAGE_DIR: /data/images
+      BOT_CONFIG_DIR: /data/config
+    volumes:
+      - app-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ActivityPub bot (handles incoming federation requests)
+  bot:
+    image: ghcr.io/rmdes/newsdiff:latest
+    command: ["node", "--import", "tsx/esm", "src/bot/index.ts"]
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      BOT_ORIGIN: ${ORIGIN}
+      BOT_PORT: "8001"
+      BOT_USERNAME: ${BOT_USERNAME:-bot}
+      BOT_NAME: ${BOT_NAME:-NewsDiff Bot}
+      BOT_CONFIG_DIR: /data/config
+    volumes:
+      - app-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Reverse proxy: routes AP paths to bot, everything else to app
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${LISTEN_PORT:-8080}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+      - bot
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newsdiff}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-newsdiff}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-newsdiff}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  app-data:
