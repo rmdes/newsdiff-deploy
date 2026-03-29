@@ -1,7 +1,7 @@
 services:
   # Database migrations (runs once on startup, then exits)
   migrate:
-    image: ghcr.io/rmdes/newsdiff:main
+    image: ghcr.io/rmdes/newsdiff-deploy:main
     command: ["node", "--import", "tsx/esm", "src/lib/server/db/migrate.ts"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-newsdiff}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-newsdiff}
@@ -12,7 +12,7 @@ services:
 
   # SvelteKit web app + feed poller + syndicator workers
   app:
-    image: ghcr.io/rmdes/newsdiff:main
+    image: ghcr.io/rmdes/newsdiff-deploy:main
     command: ["node", "build/index.js"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-newsdiff}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-newsdiff}
@@ -44,7 +44,7 @@ services:
 
   # ActivityPub bot (handles incoming federation requests)
   bot:
-    image: ghcr.io/rmdes/newsdiff:main
+    image: ghcr.io/rmdes/newsdiff-deploy:main
     command: ["node", "--import", "tsx/esm", "src/bot/index.ts"]
     environment:
       REDIS_HOST: redis
