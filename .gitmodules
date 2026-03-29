@@ -1,0 +1,3 @@
+[submodule "newsdiff"]
+	path = newsdiff
+	url = https://github.com/rmdes/newsdiff.git
