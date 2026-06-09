@@ -12,6 +12,10 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/rmdes/newsdiff-deploy
+  # Force all JS actions onto Node 24 so the Node 20 deprecation (removed
+  # 2026-09-16) doesn't break builds. Covers checkout + docker/* actions
+  # uniformly; becomes a no-op once Node 24 is the runner default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   validate:
